@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 import os
 import io
 from PIL import Image
@@ -7,7 +6,7 @@ import fitz  # PyMuPDF
 import openpyxl
 from openpyxl.drawing.image import Image as XLImage
 
-def extract_images_from_excel(file):
+def extract_images_from_excel(file, save_path):
     workbook = openpyxl.load_workbook(file)
     image_count = 0
     sheet_count = len(workbook.sheetnames)
@@ -16,12 +15,12 @@ def extract_images_from_excel(file):
         for image in sheet._images:
             image_count += 1
             img = XLImage(io.BytesIO(image._data()))
-            img.save(f"extracted_images/excel_image_{image_count}.png")
+            img.save(os.path.join(save_path, f"excel_image_{image_count}.png"))
     
     return sheet_count, image_count
 
-def extract_images_from_pdf(file):
-    pdf = fitz.open(file)
+def extract_images_from_pdf(file, save_path):
+    pdf = fitz.open(stream=file.read(), filetype="pdf")
     image_count = 0
     
     for page_num in range(len(pdf)):
@@ -35,7 +34,7 @@ def extract_images_from_pdf(file):
             
             image = Image.open(io.BytesIO(image_bytes))
             image_count += 1
-            image.save(f"extracted_images/pdf_image_{image_count}.png")
+            image.save(os.path.join(save_path, f"pdf_image_{image_count}.png"))
     
     return len(pdf), image_count
 
@@ -58,19 +57,36 @@ st.markdown("<p class='title'>File Image Extractor</p>", unsafe_allow_html=True)
 st.sidebar.markdown("<p class='title'>Upload File</p>", unsafe_allow_html=True)
 uploaded_file = st.sidebar.file_uploader("Choose an Excel or PDF file", type=["xlsx", "xls", "pdf"])
 
-if uploaded_file is not None:
+# Dropdown for selecting save path
+save_paths = ["Desktop", "Documents", "Downloads"]
+selected_path = st.selectbox("Select save location", save_paths)
+
+# Map selected path to actual directory
+path_mapping = {
+    "Desktop": os.path.join(os.path.expanduser("~"), "Desktop"),
+    "Documents": os.path.join(os.path.expanduser("~"), "Documents"),
+    "Downloads": os.path.join(os.path.expanduser("~"), "Downloads")
+}
+
+save_path = path_mapping[selected_path]
+
+# Extract button
+extract_button = st.button("Extract Images")
+
+if extract_button and uploaded_file is not None:
     file_extension = os.path.splitext(uploaded_file.name)[1].lower()
     
-    if not os.path.exists("extracted_images"):
-        os.makedirs("extracted_images")
+    extracted_folder = os.path.join(save_path, "extracted_images")
+    if not os.path.exists(extracted_folder):
+        os.makedirs(extracted_folder)
     
     if file_extension in [".xlsx", ".xls"]:
-        sheet_count, image_count = extract_images_from_excel(uploaded_file)
+        sheet_count, image_count = extract_images_from_excel(uploaded_file, extracted_folder)
         st.markdown(f"Processed Excel file: {uploaded_file.name}")
         st.markdown(f"Number of sheets: {sheet_count}")
         st.markdown(f"Number of images extracted: {image_count}")
     elif file_extension == ".pdf":
-        page_count, image_count = extract_images_from_pdf(uploaded_file)
+        page_count, image_count = extract_images_from_pdf(uploaded_file, extracted_folder)
         st.markdown(f"Processed PDF file: {uploaded_file.name}")
         st.markdown(f"Number of pages: {page_count}")
         st.markdown(f"Number of images extracted: {image_count}")
@@ -78,8 +94,10 @@ if uploaded_file is not None:
         st.error("Unsupported file format. Please upload an Excel or PDF file.")
     
     if image_count > 0:
-        st.success(f"Images have been extracted and saved to the 'extracted_images' folder.")
+        st.success(f"Images have been extracted and saved to: {extracted_folder}")
     else:
         st.warning("No images were found in the uploaded file.")
+elif extract_button and uploaded_file is None:
+    st.warning("Please upload a file before extracting images.")
 else:
-    st.markdown("Please upload an Excel or PDF file to begin.")
+    st.markdown("Please upload an Excel or PDF file and click 'Extract Images' to begin.")
