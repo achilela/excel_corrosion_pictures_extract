@@ -5,14 +5,6 @@ import zipfile
 from PIL import Image
 import fitz  # PyMuPDF
 import tempfile
-import psutil
-
-def get_drives():
-    drives = []
-    for partition in psutil.disk_partitions():
-        if 'fixed' in partition.opts or 'cdrom' in partition.opts:
-            drives.append(partition.device)
-    return drives
 
 def extract_images_from_pdf(file):
     pdf = fitz.open(stream=file.read(), filetype="pdf")
@@ -48,22 +40,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.sidebar.markdown("<p class='title'>Upload the inspection report</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p class='title'>Upload inspection reports</p>", unsafe_allow_html=True)
 uploaded_file = st.sidebar.file_uploader("Choose a PDF file", type=["pdf"])
 
-# Get available drives and create a dropdown
-drives = get_drives()
-selected_drive = st.sidebar.selectbox("Select Drive", drives)
+# Simplified save location input
+save_path = st.sidebar.text_input("Save Path", os.path.expanduser("~"))
 
-# Allow user to input additional path
-additional_path = st.sidebar.text_input("Additional Path (optional)", "")
+st.markdown("<p class='title'>Corrosion Image Extractor</p>", unsafe_allow_html=True)
 
-# Combine selected drive and additional path
-save_path = os.path.join(selected_drive, additional_path.strip("/\\"))
-
-st.markdown("<p class='title'>PDF Image Extractor</p>", unsafe_allow_html=True)
-
-extract_button = st.button("Extract Corrosive Images")
+extract_button = st.button("Extract Images")
 
 if extract_button and uploaded_file is not None:
     try:
@@ -75,7 +60,7 @@ if extract_button and uploaded_file is not None:
             st.markdown(f"Number of images extracted: {image_count}")
             
             if image_count > 0:
-                st.success(f"Corrosion images extracted successfully {image_count}.")
+                st.success(f"Successfully extracted {image_count} images.")
                 
                 # Create a ZIP file in memory
                 zip_buffer = io.BytesIO()
