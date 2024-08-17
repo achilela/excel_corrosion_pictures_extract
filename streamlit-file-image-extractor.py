@@ -13,19 +13,23 @@ def extract_images_from_excel(file, save_path):
     
     for sheet in workbook:
         for image in sheet._images:
-            image_count += 1
-            if hasattr(image, 'ref'):  # For embedded images
-                if hasattr(image.ref, 'image'):
-                    img = Image.open(io.BytesIO(image.ref.image.content()))
-                elif hasattr(image.ref, 'blipFill'):
-                    blob = image.ref.blipFill.blip.embed
-                    img = Image.open(io.BytesIO(workbook._archive.read(blob)))
-            elif hasattr(image, '_data'):  # For images stored directly
-                img = Image.open(io.BytesIO(image._data()))
-            else:
-                continue  # Skip if we can't process this image
-            
-            img.save(os.path.join(save_path, f"excel_image_{image_count}.png"))
+            img = None
+            try:
+                if hasattr(image, 'ref'):  # For embedded images
+                    if hasattr(image.ref, 'image'):
+                        img = Image.open(io.BytesIO(image.ref.image.content()))
+                    elif hasattr(image.ref, 'blipFill'):
+                        blob = image.ref.blipFill.blip.embed
+                        img = Image.open(io.BytesIO(workbook._archive.read(blob)))
+                elif hasattr(image, '_data'):  # For images stored directly
+                    img = Image.open(io.BytesIO(image._data()))
+                
+                if img:
+                    image_count += 1
+                    img.save(os.path.join(save_path, f"excel_image_{image_count}.png"))
+            except Exception as e:
+                st.warning(f"Could not extract an image: {str(e)}")
+                continue
     
     return sheet_count, image_count
 
@@ -38,13 +42,17 @@ def extract_images_from_pdf(file, save_path):
         images = page.get_images()
         
         for img_index, img in enumerate(images):
-            xref = img[0]
-            base_image = pdf.extract_image(xref)
-            image_bytes = base_image["image"]
-            
-            image = Image.open(io.BytesIO(image_bytes))
-            image_count += 1
-            image.save(os.path.join(save_path, f"pdf_image_{image_count}.png"))
+            try:
+                xref = img[0]
+                base_image = pdf.extract_image(xref)
+                image_bytes = base_image["image"]
+                
+                image = Image.open(io.BytesIO(image_bytes))
+                image_count += 1
+                image.save(os.path.join(save_path, f"pdf_image_{image_count}.png"))
+            except Exception as e:
+                st.warning(f"Could not extract an image from PDF: {str(e)}")
+                continue
     
     return len(pdf), image_count
 
