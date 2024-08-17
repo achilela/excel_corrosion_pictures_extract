@@ -4,17 +4,23 @@ import io
 import zipfile
 from PIL import Image
 import fitz  # PyMuPDF
+import tempfile
+import psutil
 
-def extract_images_from_pdf(file, save_path):
+def get_drives():
+    drives = []
+    for partition in psutil.disk_partitions():
+        if 'fixed' in partition.opts or 'cdrom' in partition.opts:
+            drives.append(partition.device)
+    return drives
+
+def extract_images_from_pdf(file):
     pdf = fitz.open(stream=file.read(), filetype="pdf")
     image_count = 0
     extracted_images = []
     
-    for page_num in range(len(pdf)):
-        page = pdf[page_num]
-        image_list = page.get_images(full=True)
-        
-        for img_index, img in enumerate(image_list):
+    for page in pdf:
+        for img in page.get_images(full=True):
             try:
                 xref = img[0]
                 base_image = pdf.extract_image(xref)
@@ -22,13 +28,9 @@ def extract_images_from_pdf(file, save_path):
                 
                 image = Image.open(io.BytesIO(image_bytes))
                 image_count += 1
-                image_filename = f"pdf_image_{image_count}.png"
-                image_path = os.path.join(save_path, image_filename)
-                image.save(image_path)
-                extracted_images.append(image_path)
+                extracted_images.append((f"pdf_image_{image_count}.png", image_bytes))
             except Exception as e:
-                st.warning(f"Could not extract an image from PDF: {str(e)}")
-                continue
+                st.warning(f"Could not extract an image: {str(e)}")
     
     return len(pdf), image_count, extracted_images
 
@@ -46,52 +48,60 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+st.sidebar.markdown("<p class='title'>Upload the inspection report</p>", unsafe_allow_html=True)
+uploaded_file = st.sidebar.file_uploader("Choose a PDF file", type=["pdf"])
+
+# Get available drives and create a dropdown
+drives = get_drives()
+selected_drive = st.sidebar.selectbox("Select Drive", drives)
+
+# Allow user to input additional path
+additional_path = st.sidebar.text_input("Additional Path (optional)", "")
+
+# Combine selected drive and additional path
+save_path = os.path.join(selected_drive, additional_path.strip("/\\"))
+
 st.markdown("<p class='title'>PDF Image Extractor</p>", unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
-
-extract_button = st.button("Extract Images")
+extract_button = st.button("Extract Corrosive Images")
 
 if extract_button and uploaded_file is not None:
     try:
         with st.spinner("Extracting images..."):
-            # Create a temporary directory to save images
-            temp_dir = "temp_images"
-            os.makedirs(temp_dir, exist_ok=True)
-            
-            page_count, image_count, extracted_images = extract_images_from_pdf(uploaded_file, temp_dir)
+            page_count, image_count, extracted_images = extract_images_from_pdf(uploaded_file)
             
             st.markdown(f"Processed PDF file: {uploaded_file.name}")
             st.markdown(f"Number of pages: {page_count}")
             st.markdown(f"Number of images extracted: {image_count}")
             
             if image_count > 0:
-                st.success(f"Successfully extracted {image_count} images.")
+                st.success(f"Corrosion images extracted successfully {image_count}.")
                 
-                # Create a ZIP file containing all extracted images
-                zip_filename = "extracted_images.zip"
-                with zipfile.ZipFile(zip_filename, 'w') as zipf:
-                    for img_path in extracted_images:
-                        zipf.write(img_path, os.path.basename(img_path))
+                # Create a ZIP file in memory
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w') as zipf:
+                    for img_name, img_data in extracted_images:
+                        zipf.writestr(img_name, img_data)
                 
                 # Provide download link for the ZIP file
-                with open(zip_filename, "rb") as f:
-                    bytes_data = f.read()
-                    st.download_button(
-                        label="Download Extracted Images",
-                        data=bytes_data,
-                        file_name=zip_filename,
-                        mime="application/zip"
-                    )
+                st.download_button(
+                    label="Download Extracted Images",
+                    data=zip_buffer.getvalue(),
+                    file_name="extracted_images.zip",
+                    mime="application/zip"
+                )
+                
+                # Save images to selected location
+                try:
+                    os.makedirs(save_path, exist_ok=True)
+                    for img_name, img_data in extracted_images:
+                        with open(os.path.join(save_path, img_name), 'wb') as f:
+                            f.write(img_data)
+                    st.success(f"Images saved to: {save_path}")
+                except Exception as e:
+                    st.error(f"Failed to save images to selected location: {str(e)}")
             else:
                 st.warning("No images were found in the uploaded file.")
-            
-            # Clean up: remove temporary files
-            for img_path in extracted_images:
-                os.remove(img_path)
-            os.rmdir(temp_dir)
-            if os.path.exists(zip_filename):
-                os.remove(zip_filename)
                 
     except Exception as e:
         st.error(f"An error occurred while processing the file: {str(e)}")
