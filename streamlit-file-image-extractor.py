@@ -14,7 +14,9 @@ def extract_images_from_excel(file, save_path):
     for sheet in workbook:
         for image in sheet._images:
             image_count += 1
-            img = XLImage(io.BytesIO(image._data()))
+            image_data = image.ref.blipFill.blip.embed
+            image_bytes = workbook._archive.read(image_data)
+            img = Image.open(io.BytesIO(image_bytes))
             img.save(os.path.join(save_path, f"excel_image_{image_count}.png"))
     
     return sheet_count, image_count
@@ -80,23 +82,26 @@ if extract_button and uploaded_file is not None:
     if not os.path.exists(extracted_folder):
         os.makedirs(extracted_folder)
     
-    if file_extension in [".xlsx", ".xls"]:
-        sheet_count, image_count = extract_images_from_excel(uploaded_file, extracted_folder)
-        st.markdown(f"Processed Excel file: {uploaded_file.name}")
-        st.markdown(f"Number of sheets: {sheet_count}")
-        st.markdown(f"Number of images extracted: {image_count}")
-    elif file_extension == ".pdf":
-        page_count, image_count = extract_images_from_pdf(uploaded_file, extracted_folder)
-        st.markdown(f"Processed PDF file: {uploaded_file.name}")
-        st.markdown(f"Number of pages: {page_count}")
-        st.markdown(f"Number of images extracted: {image_count}")
-    else:
-        st.error("Unsupported file format. Please upload an Excel or PDF file.")
-    
-    if image_count > 0:
-        st.success(f"Images have been extracted and saved to: {extracted_folder}")
-    else:
-        st.warning("No images were found in the uploaded file.")
+    try:
+        if file_extension in [".xlsx", ".xls"]:
+            sheet_count, image_count = extract_images_from_excel(uploaded_file, extracted_folder)
+            st.markdown(f"Processed Excel file: {uploaded_file.name}")
+            st.markdown(f"Number of sheets: {sheet_count}")
+            st.markdown(f"Number of images extracted: {image_count}")
+        elif file_extension == ".pdf":
+            page_count, image_count = extract_images_from_pdf(uploaded_file, extracted_folder)
+            st.markdown(f"Processed PDF file: {uploaded_file.name}")
+            st.markdown(f"Number of pages: {page_count}")
+            st.markdown(f"Number of images extracted: {image_count}")
+        else:
+            st.error("Unsupported file format. Please upload an Excel or PDF file.")
+        
+        if image_count > 0:
+            st.success(f"Images have been extracted and saved to: {extracted_folder}")
+        else:
+            st.warning("No images were found in the uploaded file.")
+    except Exception as e:
+        st.error(f"An error occurred while processing the file: {str(e)}")
 elif extract_button and uploaded_file is None:
     st.warning("Please upload a file before extracting images.")
 else:
