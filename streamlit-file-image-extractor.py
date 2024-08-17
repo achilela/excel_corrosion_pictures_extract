@@ -14,9 +14,17 @@ def extract_images_from_excel(file, save_path):
     for sheet in workbook:
         for image in sheet._images:
             image_count += 1
-            image_data = image.ref.blipFill.blip.embed
-            image_bytes = workbook._archive.read(image_data)
-            img = Image.open(io.BytesIO(image_bytes))
+            if hasattr(image, 'ref'):  # For embedded images
+                if hasattr(image.ref, 'image'):
+                    img = Image.open(io.BytesIO(image.ref.image.content()))
+                elif hasattr(image.ref, 'blipFill'):
+                    blob = image.ref.blipFill.blip.embed
+                    img = Image.open(io.BytesIO(workbook._archive.read(blob)))
+            elif hasattr(image, '_data'):  # For images stored directly
+                img = Image.open(io.BytesIO(image._data()))
+            else:
+                continue  # Skip if we can't process this image
+            
             img.save(os.path.join(save_path, f"excel_image_{image_count}.png"))
     
     return sheet_count, image_count
