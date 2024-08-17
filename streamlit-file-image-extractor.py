@@ -3,28 +3,45 @@ import io
 import zipfile
 from PIL import Image
 import fitz  # PyMuPDF
+import imghdr
+
+def get_image_format(image_bytes):
+    format = imghdr.what(None, h=image_bytes)
+    if format:
+        return format
+    else:
+        # Fallback to PIL for format detection
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as img:
+                return img.format.lower()
+        except:
+            return 'png'  # Default to png if detection fails
 
 def extract_images_from_pdf(file):
     pdf = fitz.open(stream=file.read(), filetype="pdf")
     image_count = 0
     extracted_images = []
     
-    for page in pdf:
-        for img in page.get_images(full=True):
+    for page_num, page in enumerate(pdf):
+        for img_index, img in enumerate(page.get_images(full=True)):
             try:
                 xref = img[0]
                 base_image = pdf.extract_image(xref)
                 image_bytes = base_image["image"]
                 
-                image = Image.open(io.BytesIO(image_bytes))
+                image_format = get_image_format(image_bytes)
                 image_count += 1
-                extracted_images.append((f"{file.name}_image_{image_count}.png", image_bytes))
+                
+                # Create a specific file pattern name
+                file_name = f"corrosion_{file.name.split('.')[0]}_{page_num+1}_{img_index+1}.{image_format}"
+                
+                extracted_images.append((file_name, image_bytes))
             except Exception as e:
                 st.warning(f"Could not extract an image from {file.name}: {str(e)}")
     
     return len(pdf), image_count, extracted_images
 
-st.set_page_config(page_title="Multi-PDF Image Extractor", layout="wide")
+st.set_page_config(page_title="Enhanced Multi-PDF Image Extractor", layout="wide")
 
 st.markdown("""
 <style>
@@ -41,7 +58,7 @@ st.markdown("""
 st.sidebar.markdown("<p class='title'>Upload PDFs</p>", unsafe_allow_html=True)
 uploaded_files = st.sidebar.file_uploader("Choose up to 5 PDF files", type=["pdf"], accept_multiple_files=True)
 
-st.markdown("<p class='title'>Multi-PDF Image Extractor</p>", unsafe_allow_html=True)
+st.markdown("<p class='title'>Enhanced Multi-PDF Image Extractor</p>", unsafe_allow_html=True)
 
 extract_button = st.button("Extract Images")
 
