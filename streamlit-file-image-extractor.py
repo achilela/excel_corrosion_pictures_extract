@@ -17,13 +17,13 @@ def get_image_format(image_bytes):
         except:
             return 'png'  # Default to png if detection fails
 
-def extract_images_from_pdf(file):
+def extract_images_from_pdf(file, start_index):
     pdf = fitz.open(stream=file.read(), filetype="pdf")
     image_count = 0
     extracted_images = []
     
-    for page_num, page in enumerate(pdf):
-        for img_index, img in enumerate(page.get_images(full=True)):
+    for page in pdf:
+        for img in page.get_images(full=True):
             try:
                 xref = img[0]
                 base_image = pdf.extract_image(xref)
@@ -32,8 +32,8 @@ def extract_images_from_pdf(file):
                 image_format = get_image_format(image_bytes)
                 image_count += 1
                 
-                # Create a specific file pattern name
-                file_name = f"corrosion_{file.name.split('.')[0]}_{page_num+1}_{img_index+1}.{image_format}"
+                # Create the specific file pattern name
+                file_name = f"corrosion.{start_index + image_count}.{image_format}"
                 
                 extracted_images.append((file_name, image_bytes))
             except Exception as e:
@@ -41,7 +41,7 @@ def extract_images_from_pdf(file):
     
     return len(pdf), image_count, extracted_images
 
-st.set_page_config(page_title="Enhanced Multi-PDF Image Extractor", layout="wide")
+st.set_page_config(page_title="Multi-PDF Image Extractor", layout="wide")
 
 st.markdown("""
 <style>
@@ -58,7 +58,7 @@ st.markdown("""
 st.sidebar.markdown("<p class='title'>Upload PDFs</p>", unsafe_allow_html=True)
 uploaded_files = st.sidebar.file_uploader("Choose up to 5 PDF files", type=["pdf"], accept_multiple_files=True)
 
-st.markdown("<p class='title'>Enhanced Multi-PDF Image Extractor</p>", unsafe_allow_html=True)
+st.markdown("<p class='title'>Multi-PDF Image Extractor</p>", unsafe_allow_html=True)
 
 extract_button = st.button("Extract Images")
 
@@ -70,13 +70,15 @@ if extract_button and uploaded_files:
             all_extracted_images = []
             total_page_count = 0
             total_image_count = 0
+            current_index = 0
 
             with st.spinner("Extracting images..."):
                 for uploaded_file in uploaded_files:
-                    page_count, image_count, extracted_images = extract_images_from_pdf(uploaded_file)
+                    page_count, image_count, extracted_images = extract_images_from_pdf(uploaded_file, current_index)
                     all_extracted_images.extend(extracted_images)
                     total_page_count += page_count
                     total_image_count += image_count
+                    current_index += image_count
                     
                     st.markdown(f"Processed PDF file: {uploaded_file.name}")
                     st.markdown(f"Number of pages: {page_count}")
